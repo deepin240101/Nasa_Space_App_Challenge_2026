@@ -470,5 +470,42 @@ html.is-loading,html.is-loading body{overflow:hidden}
   else new MutationObserver((m,o)=>{if(!root.classList.contains('is-loading')){o.disconnect();setTimeout(start,260);}}).observe(root,{attributes:true,attributeFilter:['class']});
 })();
 </script>
+<script>
+// Warm the cache for story.html and its assets once the home page is fully loaded.
+(function(){
+  var c=navigator.connection||{};
+  if(c.saveData||/(^|-)2g$/.test(c.effectiveType||''))return; // respect data saver / slow links
+  var STORY='story.html', done=false;
+  function add(rel,href,extra){
+    if(document.querySelector('link[rel="'+rel+'"][href="'+href+'"]'))return;
+    var l=document.createElement('link');l.rel=rel;l.href=href;
+    for(var k in extra)l.setAttribute(k,extra[k]);
+    document.head.appendChild(l);
+  }
+  function warm(){
+    if(done)return;done=true;
+    fetch(STORY,{credentials:'same-origin'}).then(function(r){return r.ok?r.text():Promise.reject()}).then(function(html){
+      var doc=new DOMParser().parseFromString(html,'text/html'), base=new URL(STORY,location.href);
+      var u=function(v){return new URL(v,base).href};
+      doc.querySelectorAll('script[type="module"][src],link[rel="modulepreload"][href]').forEach(function(n){
+        add('modulepreload',u(n.getAttribute('src')||n.getAttribute('href')),{crossorigin:''});
+      });
+      doc.querySelectorAll('script[src]:not([type="module"])').forEach(function(n){
+        add('prefetch',u(n.getAttribute('src')),{as:'script'});
+      });
+      doc.querySelectorAll('link[rel="stylesheet"][href]').forEach(function(n){
+        var h=u(n.getAttribute('href'));
+        add('prefetch',h,n.hasAttribute('crossorigin')?{as:'style',crossorigin:''}:{as:'style'});
+      });
+    }).catch(function(){});
+  }
+  function idle(){(window.requestIdleCallback||function(f){setTimeout(f,300)})(warm,{timeout:4000});}
+  // wait for window load AND for the loader overlay to be gone
+  function check(){
+    if(document.readyState==='complete'&&!document.getElementById('loader')){clearInterval(iv);idle();}
+  }
+  var iv=setInterval(check,300);
+})();
+</script>
 </body>
 </html>
